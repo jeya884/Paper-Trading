@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PaperFloor — F&amp;O Trading Floor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0A0E14; --panel:#10161D; --panel-alt:#141B23; --border:#1F2A33;
+    --text:#C9D3D9; --text-dim:#6B7680; --text-bright:#F1F4F6;
+    --gold:#D4A93F; --gold-dim:#8A7233;
+    --bull:#2FBF71; --bull-bg:rgba(47,191,113,0.12);
+    --bear:#E2564F; --bear-bg:rgba(226,86,79,0.12);
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{ background:var(--bg); color:var(--text); font-family:'IBM Plex Sans', sans-serif; min-height:100vh; display:flex; flex-direction:column; overflow-x:hidden; }
+  .mono{font-family:'IBM Plex Mono', monospace;}
+
+  #ticker-wrap{ background:#05070A; border-bottom:1px solid var(--border); overflow:hidden; white-space:nowrap; padding:9px 0; position:relative; flex-shrink:0; }
+  #ticker-wrap::before, #ticker-wrap::after{ content:""; position:absolute; top:0; bottom:0; width:60px; z-index:2; }
+  #ticker-wrap::before{ left:0; background:linear-gradient(90deg, #05070A, transparent);}
+  #ticker-wrap::after{ right:0; background:linear-gradient(-90deg, #05070A, transparent);}
+  #ticker-track{ display:inline-flex; animation: scroll-ticker 60s linear infinite; will-change: transform; }
+  @keyframes scroll-ticker{ from{ transform: translateX(0);} to{ transform: translateX(-50%);} }
+  .tick-item{ font-family:'IBM Plex Mono', monospace; font-size:12.5px; letter-spacing:0.04em; padding:0 22px; display:inline-flex; align-items:center; gap:7px; color:var(--text-dim); }
+  .tick-item .sym{ color:var(--gold); font-weight:600; }
+  .tick-item .up{ color:var(--bull); } .tick-item .dn{ color:var(--bear); }
+  @media (prefers-reduced-motion: reduce){ #ticker-track{ animation: none; } }
+
+  #app{ flex:1; display:flex; flex-direction:column; }
+
+  .gate{ flex:1; display:flex; align-items:center; justify-content:center; padding:32px 16px;
+    background: radial-gradient(ellipse 900px 500px at 50% -10%, rgba(212,169,63,0.08), transparent); }
+  .gate-card{ width:100%; max-width:400px; background:var(--panel); border:1px solid var(--border); position:relative; }
+  .gate-card::before{ content:""; position:absolute; top:0; left:0; right:0; height:3px; background:linear-gradient(90deg, var(--gold), var(--gold-dim), var(--gold)); }
+  .gate-head{ padding:32px 32px 20px; border-bottom:1px dashed var(--border); text-align:center; }
+  .gate-brand{ font-family:'Big Shoulders Display', sans-serif; font-weight:800; font-size:34px; letter-spacing:0.03em; color:var(--text-bright); text-transform:uppercase; }
+  .gate-brand span{ color:var(--gold); }
+  .gate-sub{ font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--text-dim); margin-top:6px; }
+  .gate-body{ padding:28px 32px 32px; }
+  .field{ margin-bottom:18px; }
+  .field label{ display:block; font-size:11px; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-dim); margin-bottom:7px; }
+  .field input, .field select{ width:100%; background:var(--panel-alt); border:1px solid var(--border); color:var(--text-bright); padding:11px 13px; font-family:'IBM Plex Mono', monospace; font-size:14.5px; letter-spacing:0.04em; outline:none; transition:border-color .15s; }
+  .field input:focus, .field select:focus{ border-color:var(--gold); }
+  .field-hint{ font-size:11px; color:var(--text-dim); margin-top:6px; line-height:1.5;}
+  .btn{ width:100%; padding:12px; background:var(--gold); color:#0A0E14; border:none; font-family:'IBM Plex Sans', sans-serif; font-weight:700; font-size:13px; letter-spacing:0.08em; text-transform:uppercase; cursor:pointer; transition:filter .15s, transform .05s; }
+  .btn:hover{ filter:brightness(1.08); } .btn:active{ transform:translateY(1px); }
+  .btn-outline{ background:transparent; border:1px solid var(--border); color:var(--text); }
+  .btn-outline:hover{ border-color:var(--gold); color:var(--gold); filter:none; }
+  .btn-sell{ background:var(--bear); color:#fff; } .btn-buy{ background:var(--bull); color:#06170F; }
+  .gate-error{ background:var(--bear-bg); border:1px solid var(--bear); color:var(--bear); font-size:12.5px; padding:9px 12px; margin-bottom:16px; display:none; }
+  .gate-note{ text-align:center; font-size:11px; color:var(--text-dim); padding:16px 32px 26px; border-top:1px dashed var(--border); }
+
+  .topbar{ display:flex; align-items:center; justify-content:space-between; padding:14px 26px; border-bottom:1px solid var(--border); background:var(--panel); flex-wrap:wrap; gap:12px; }
+  .topbar-left{ display:flex; align-items:center; gap:14px; }
+  .topbar-brand{ font-family:'Big Shoulders Display', sans-serif; font-weight:800; font-size:22px; letter-spacing:0.03em; color:var(--text-bright); text-transform:uppercase; }
+  .topbar-brand span{ color:var(--gold); }
+  .badge-roll{ font-family:'IBM Plex Mono', monospace; font-size:11.5px; color:var(--text-dim); border:1px solid var(--border); padding:3px 9px; }
+  .topbar-right{ display:flex; align-items:center; gap:18px; }
+  .cash-pill{ font-family:'IBM Plex Mono', monospace; font-size:13px; color:var(--text-bright); border-left:2px solid var(--gold); padding-left:10px; }
+  .cash-pill .lbl{ color:var(--text-dim); font-size:10.5px; text-transform:uppercase; letter-spacing:0.08em; display:block; margin-bottom:2px;}
+  .logout-btn{ background:none; border:1px solid var(--border); color:var(--text-dim); padding:7px 14px; font-size:11px; letter-spacing:0.08em; text-transform:uppercase; cursor:pointer; }
+  .logout-btn:hover{ border-color:var(--bear); color:var(--bear); }
+
+  .tabs{ display:flex; gap:2px; padding:0 26px; background:var(--panel); border-bottom:1px solid var(--border); overflow-x:auto; }
+  .tab-btn{ background:none; border:none; color:var(--text-dim); padding:13px 18px; font-size:12.5px; letter-spacing:0.06em; text-transform:uppercase; cursor:pointer; border-bottom:2px solid transparent; white-space:nowrap; font-family:'IBM Plex Sans', sans-serif; font-weight:600; }
+  .tab-btn.active{ color:var(--gold); border-bottom-color:var(--gold); }
+  .tab-btn:hover:not(.active){ color:var(--text-bright); }
+  .subtabs{ padding:0; margin-bottom:16px; background:transparent; border-bottom:1px solid var(--border); }
+
+  .content{ flex:1; padding:22px 26px 40px; max-width:1200px; width:100%; margin:0 auto; }
+  .section-title{ font-family:'Big Shoulders Display', sans-serif; font-weight:700; font-size:20px; letter-spacing:0.03em; text-transform:uppercase; color:var(--text-bright); margin-bottom:14px; }
+  .grid-summary{ display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:12px; margin-bottom:26px; }
+  .stat-card{ background:var(--panel); border:1px solid var(--border); padding:14px 16px; }
+  .stat-card .lbl{ font-size:10.5px; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-dim); margin-bottom:6px;}
+  .stat-card .val{ font-family:'IBM Plex Mono', monospace; font-size:19px; color:var(--text-bright); }
+  .stat-card .val.up{ color:var(--bull); } .stat-card .val.dn{ color:var(--bear); }
+
+  table{ width:100%; border-collapse:collapse; }
+  thead th{ text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:0.07em; color:var(--text-dim); padding:10px 12px; border-bottom:1px solid var(--border); font-weight:600; }
+  tbody td{ padding:11px 12px; border-bottom:1px solid var(--border); font-family:'IBM Plex Mono', monospace; font-size:13px; color:var(--text); vertical-align:middle; }
+  tbody tr:hover{ background:var(--panel-alt); }
+  .name-sub{ font-family:'IBM Plex Sans',sans-serif; font-size:11px; color:var(--text-dim); }
+  .chg.up{ color:var(--bull); } .chg.dn{ color:var(--bear); }
+  .row-actions{ display:flex; gap:6px; flex-wrap:wrap; }
+  .mini-btn{ padding:6px 12px; font-size:11px; text-transform:uppercase; letter-spacing:0.05em; border:none; cursor:pointer; font-family:'IBM Plex Sans',sans-serif; font-weight:700; }
+  .empty-state{ text-align:center; padding:50px 20px; color:var(--text-dim); border:1px dashed var(--border); font-size:13px; }
+  .table-wrap{ background:var(--panel); border:1px solid var(--border); overflow-x:auto; }
+
+  .modal-overlay{ position:fixed; inset:0; background:rgba(5,7,10,0.75); display:none; align-items:center; justify-content:center; z-index:50; padding:16px; }
+  .modal-overlay.show{ display:flex; }
+  .modal{ width:100%; max-width:380px; background:var(--panel); border:1px solid var(--border); position:relative; }
+  .modal::before{ content:""; position:absolute; top:0; left:0; right:0; height:3px; }
+  .modal.buy-mode::before{ background:var(--bull); } .modal.sell-mode::before{ background:var(--bear); }
+  .modal-head{ padding:20px 22px 14px; border-bottom:1px dashed var(--border); }
+  .modal-head .m-sym{ font-family:'Big Shoulders Display',sans-serif; font-size:22px; color:var(--text-bright); font-weight:700;}
+  .modal-head .m-price{ font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--text-dim); margin-top:4px;}
+  .modal-body{ padding:20px 22px; }
+  .modal-foot{ padding:0 22px 22px; display:flex; gap:10px; }
+  .modal-foot .btn{ flex:1; }
+  .order-total{ font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--text-bright); background:var(--panel-alt); border:1px solid var(--border); padding:10px 12px; margin-bottom:16px; display:flex; justify-content:space-between; }
+  .close-x{ position:absolute; top:14px; right:16px; background:none; border:none; color:var(--text-dim); font-size:18px; cursor:pointer; line-height:1; }
+  .close-x:hover{ color:var(--text-bright); }
+  .form-err{ color:var(--bear); font-size:11.5px; margin-top:8px; display:none; }
+
+  ::-webkit-scrollbar{ height:8px; width:8px; }
+  ::-webkit-scrollbar-thumb{ background:var(--border); }
+</style>
+</head>
+<body>
+
+  <div id="ticker-wrap"><div id="ticker-track"></div></div>
+  <div id="app"></div>
+
+  <!-- Equity order modal -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal" id="orderModal">
+      <button class="close-x" id="modalClose">&times;</button>
+      <div class="modal-head">
+        <div class="m-sym" id="mSym">—</div>
+        <div class="m-price mono" id="mPrice">LTP ₹0.00</div>
+      </div>
+      <div class="modal-body">
+        <div class="field"><label id="qtyLabel">Quantity</label><input type="number" id="qtyInput" min="1" value="1" /></div>
+        <div class="order-total"><span>Order Value</span><span id="orderTotal">₹0.00</span></div>
+        <div class="form-err" id="formErr"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-outline" id="modalCancel">Cancel</button>
+        <button class="btn" id="modalSubmit">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- F&O order modal -->
+  <div class="modal-overlay" id="fnoModalOverlay">
+    <div class="modal" id="fnoOrderModal">
+      <button class="close-x" id="fnoModalClose">&times;</button>
+      <div class="modal-head">
+        <div class="m-sym" id="fnoMSym">—</div>
+        <div class="m-price mono" id="fnoMPrice">—</div>
+      </div>
+      <div class="modal-body">
+        <div class="field"><label id="fnoLotsLabel">Lots</label><input type="number" id="fnoLotsInput" min="1" value="1" /></div>
+        <div class="order-total"><span>Est. Notional</span><span id="fnoOrderTotal">₹0.00</span></div>
+        <div class="form-err" id="fnoFormErr"></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-outline" id="fnoModalCancel">Cancel</button>
+        <button class="btn" id="fnoModalSubmit">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ===================== DATA ===================== */
+function genRollNumbers(){ const l=[]; for(let i=1;i<=175;i++) l.push('25MBA'+String(i).padStart(2,'0')); return l; }
+const VALID_ROLLS = genRollNumbers();
+const STARTING_CASH = 1000000;
+
+const STOCK_SEED = [
+  {sym:'TCS', name:'Tata Consultancy Services', sector:'IT', price:3850},
+  {sym:'INFY', name:'Infosys Ltd', sector:'IT', price:1620},
+  {sym:'WIPRO', name:'Wipro Ltd', sector:'IT', price:480},
+  {sym:'HCLTECH', name:'HCL Technologies', sector:'IT', price:1750},
+  {sym:'HDFCBANK', name:'HDFC Bank', sector:'Banking', price:1680},
+  {sym:'ICICIBANK', name:'ICICI Bank', sector:'Banking', price:1150},
+  {sym:'SBIN', name:'State Bank of India', sector:'Banking', price:810},
+  {sym:'KOTAKBANK', name:'Kotak Mahindra Bank', sector:'Banking', price:1780},
+  {sym:'HUL', name:'Hindustan Unilever', sector:'FMCG', price:2450},
+  {sym:'ITC', name:'ITC Ltd', sector:'FMCG', price:460},
+  {sym:'NESTLEIND', name:'Nestle India', sector:'FMCG', price:2380},
+  {sym:'MARUTI', name:'Maruti Suzuki', sector:'Auto', price:11200},
+  {sym:'TATAMOTORS', name:'Tata Motors', sector:'Auto', price:920},
+  {sym:'M&M', name:'Mahindra & Mahindra', sector:'Auto', price:2650},
+  {sym:'SUNPHARMA', name:'Sun Pharma', sector:'Pharma', price:1780},
+  {sym:'DRREDDY', name:"Dr. Reddy's Labs", sector:'Pharma', price:6200},
+  {sym:'CIPLA', name:'Cipla Ltd', sector:'Pharma', price:1490},
+  {sym:'RELIANCE', name:'Reliance Industries', sector:'Energy', price:2890},
+  {sym:'ONGC', name:'Oil & Natural Gas Corp', sector:'Energy', price:260},
+  {sym:'NTPC', name:'NTPC Ltd', sector:'Energy', price:380},
+  {sym:'ADANIENT', name:'Adani Enterprises', sector:'Diversified', price:2950},
+  {sym:'BHARTIARTL', name:'Bharti Airtel', sector:'Telecom', price:1590},
+];
+let STOCKS = STOCK_SEED.map(s => ({...s, prevClose:s.price, ltp:s.price}));
+
+const FNO_UNDERLYINGS = [
+  {sym:'NIFTY', name:'Nifty 50 Index', kind:'INDEX', spot:24500, sigma:0.13, lotSize:75, strikeStep:100},
+  {sym:'BANKNIFTY', name:'Bank Nifty Index', kind:'INDEX', spot:51500, sigma:0.15, lotSize:30, strikeStep:100},
+  {sym:'RELIANCE', name:'Reliance Industries', kind:'STOCK', sigma:0.24, lotSize:250, strikeStep:20},
+  {sym:'TCS', name:'Tata Consultancy Services', kind:'STOCK', sigma:0.20, lotSize:150, strikeStep:50},
+  {sym:'HDFCBANK', name:'HDFC Bank', kind:'STOCK', sigma:0.19, lotSize:550, strikeStep:20},
+  {sym:'INFY', name:'Infosys Ltd', kind:'STOCK', sigma:0.22, lotSize:400, strikeStep:20},
+  {sym:'SBIN', name:'State Bank of India', kind:'STOCK', sigma:0.25, lotSize:1500, strikeStep:10},
+];
+let INDICES = FNO_UNDERLYINGS.filter(u=>u.kind==='INDEX').map(u=>({sym:u.sym, name:u.name, price:u.spot, prevClose:u.spot, ltp:u.spot}));
+
+const EXPIRY_DATE = new Date('2026-09-25T15:30:00');
+const RISK_FREE = 0.065;
+let priceHistory = {};
+
+/* ===================== STATE ===================== */
+let currentRoll = null;
+let portfolio = defaultPortfolio();
+let activeTab = 'market';
+let pendingOrder = null;
+let pendingFno = null;
+let fnoSubTab = 'futures';
+let fnoSelectedUnderlying = 'NIFTY';
+let chartSelectedSym = 'NIFTY';
+
+function defaultPortfolio(){ return { cash: STARTING_CASH, holdings:{}, transactions:[], fno:{ positions:{}, transactions:[] } }; }
+
+/* ===================== STORAGE ===================== */
+async function loadPortfolio(roll){
+  try{
+    const res = await window.storage.get('pf_user_' + roll, false);
+    if(res && res.value){
+      const parsed = JSON.parse(res.value);
+      if(!parsed.fno) parsed.fno = { positions:{}, transactions:[] };
+      return parsed;
+    }
+  }catch(e){ /* no existing record */ }
+  return defaultPortfolio();
+}
+async function savePortfolio(roll, data){
+  try{ await window.storage.set('pf_user_' + roll, JSON.stringify(data), false); }
+  catch(e){ console.error('storage save failed', e); }
+}
+
+/* ===================== HELPERS ===================== */
+function inr(n){ return '₹' + Number(n||0).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2}); }
+function pct(n){ return (n>=0?'+':'') + n.toFixed(2) + '%'; }
+function getSpot(sym){
+  const idx = INDICES.find(i=>i.sym===sym); if(idx) return idx.ltp;
+  const st = STOCKS.find(s=>s.sym===sym); return st ? st.ltp : 0;
+}
+function daysToExpiry(){ return Math.max(1, Math.ceil((EXPIRY_DATE - Date.now())/86400000)); }
+function futPrice(spot){ return Number((spot*(1 + RISK_FREE*daysToExpiry()/365)).toFixed(2)); }
+function erf(x){
+  const sign = x<0?-1:1; x=Math.abs(x);
+  const a1=0.254829592,a2=-0.284496736,a3=1.421413741,a4=-1.453152027,a5=1.061405429,p=0.3275911;
+  const t=1/(1+p*x);
+  const y=1-(((((a5*t+a4)*t)+a3)*t+a2)*t+a1)*t*Math.exp(-x*x);
+  return sign*y;
+}
+function normCDF(x){ return 0.5*(1+erf(x/Math.sqrt(2))); }
+function bsPrice(spot,strike,tYears,r,sigma,type){
+  if(tYears<=0) tYears=0.0007;
+  const d1=(Math.log(spot/strike)+(r+0.5*sigma*sigma)*tYears)/(sigma*Math.sqrt(tYears));
+  const d2=d1-sigma*Math.sqrt(tYears);
+  const val = type==='CE'
+    ? spot*normCDF(d1) - strike*Math.exp(-r*tYears)*normCDF(d2)
+    : strike*Math.exp(-r*tYears)*normCDF(-d2) - spot*normCDF(-d1);
+  return Math.max(0.05, val);
+}
+function getOptionChain(underlyingSym){
+  const cfg = FNO_UNDERLYINGS.find(u=>u.sym===underlyingSym);
+  const spot = getSpot(underlyingSym);
+  const step = cfg.strikeStep;
+  const atm = Math.round(spot/step)*step;
+  const strikes = [];
+  for(let i=-5;i<=5;i++) strikes.push(atm+i*step);
+  const t = daysToExpiry()/365;
+  return strikes.map(k=>({ strike:k, ce:Number(bsPrice(spot,k,t,RISK_FREE,cfg.sigma,'CE').toFixed(2)), pe:Number(bsPrice(spot,k,t,RISK_FREE,cfg.sigma,'PE').toFixed(2)) }));
+}
+
+/* ===================== PRICE HISTORY SEED ===================== */
+function seedPriceHistory(){
+  const now = Date.now();
+  [...STOCKS, ...INDICES].forEach(inst=>{
+    const temp=[inst.ltp]; let p=inst.ltp;
+    for(let i=0;i<59;i++){ p = p/(1+(Math.random()-0.5)*0.006); temp.push(p); }
+    temp.reverse();
+    priceHistory[inst.sym] = temp.map((val,idx)=>({ t: now-(temp.length-1-idx)*60000, p:Number(val.toFixed(2)) }));
+  });
+}
+
+/* ===================== TICKER ===================== */
+function renderTicker(){
+  const track = document.getElementById('ticker-track');
+  const buildSet = () => [...INDICES, ...STOCKS].map(s=>{
+    const chg = s.ltp - s.prevClose; const chgPct=(chg/s.prevClose)*100;
+    const cls = chg>=0?'up':'dn'; const arrow = chg>=0?'▲':'▼';
+    return `<span class="tick-item"><span class="sym">${s.sym}</span><span>${inr(s.ltp)}</span><span class="${cls}">${arrow} ${pct(chgPct)}</span></span>`;
+  }).join('');
+  track.innerHTML = buildSet() + buildSet();
+}
+
+/* ===================== PRICE SIMULATION ===================== */
+function tickPrices(){
+  STOCKS = STOCKS.map(s=>{ const drift=(Math.random()-0.5)*0.006; return {...s, ltp:Number(Math.max(1,s.ltp*(1+drift)).toFixed(2))}; });
+  INDICES = INDICES.map(s=>{ const drift=(Math.random()-0.5)*0.003; return {...s, ltp:Number(Math.max(1,s.ltp*(1+drift)).toFixed(2))}; });
+  [...STOCKS, ...INDICES].forEach(inst=>{
+    if(!priceHistory[inst.sym]) priceHistory[inst.sym]=[];
+    priceHistory[inst.sym].push({t:Date.now(), p:inst.ltp});
+    if(priceHistory[inst.sym].length>150) priceHistory[inst.sym].shift();
+  });
+  renderTicker();
+  if(currentRoll){
+    if(activeTab==='market') renderMarketTable();
+    if(activeTab==='portfolio') renderPortfolioTable();
+    if(activeTab==='fno') refreshFnoSub();
+    if(activeTab==='chart') refreshChart();
+    renderSummaryStats();
+  }
+}
+setInterval(tickPrices, 2500);
+
+/* ===================== LOGIN ===================== */
+function renderLogin(){
+  currentRoll = null;
+  document.getElementById('app').innerHTML = `
+    <div class="gate">
+      <div class="gate-card">
+        <div class="gate-head">
+          <div class="gate-brand">PAPER<span>FLOOR</span></div>
+          <div class="gate-sub">Trading Floor Access</div>
+        </div>
+        <div class="gate-body">
+          <div class="gate-error" id="loginErr"></div>
+          <div class="field"><label>Roll Number</label><input type="text" id="rollInput" placeholder="25MBA01" autocomplete="off" /></div>
+          <div class="field">
+            <label>Password</label>
+            <input type="password" id="passInput" placeholder="Same as roll number" autocomplete="off" />
+            <div class="field-hint">Your password is your roll number, entered exactly as issued (e.g. 25MBA01).</div>
+          </div>
+          <button class="btn" id="loginBtn">Enter Floor</button>
+        </div>
+        <div class="gate-note">Access is restricted to registered roll numbers 25MBA01 – 25MBA175.</div>
+      </div>
+    </div>`;
+  document.getElementById('loginBtn').addEventListener('click', doLogin);
+  document.getElementById('passInput').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
+  document.getElementById('rollInput').addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('passInput').focus(); });
+}
+async function doLogin(){
+  const roll = document.getElementById('rollInput').value.trim().toUpperCase();
+  const pass = document.getElementById('passInput').value.trim().toUpperCase();
+  const errBox = document.getElementById('loginErr');
+  if(!VALID_ROLLS.includes(roll)){ errBox.textContent='Roll number not recognised. Valid range: 25MBA01 – 25MBA175.'; errBox.style.display='block'; return; }
+  if(roll !== pass){ errBox.textContent='Password must match your roll number exactly.'; errBox.style.display='block'; return; }
+  errBox.style.display='none';
+  currentRoll = roll;
+  portfolio = await loadPortfolio(roll);
+  activeTab = 'market';
+  renderDashboard();
+}
+
+/* ===================== DASHBOARD SHELL ===================== */
+function renderDashboard(){
+  document.getElementById('app').innerHTML = `
+    <div class="topbar">
+      <div class="topbar-left"><div class="topbar-brand">PAPER<span>FLOOR</span></div><div class="badge-roll">${currentRoll}</div></div>
+      <div class="topbar-right">
+        <div class="cash-pill"><span class="lbl">Cash Balance</span><span id="cashVal">${inr(portfolio.cash)}</span></div>
+        <button class="logout-btn" id="logoutBtn">Log Out</button>
+      </div>
+    </div>
+    <div class="tabs">
+      <button class="tab-btn" data-tab="market">Market Watch</button>
+      <button class="tab-btn" data-tab="portfolio">Portfolio</button>
+      <button class="tab-btn" data-tab="fno">F&amp;O</button>
+      <button class="tab-btn" data-tab="chart">Chart</button>
+      <button class="tab-btn" data-tab="orders">Order History</button>
+    </div>
+    <div class="content" id="tabContent"></div>`;
+  document.getElementById('logoutBtn').addEventListener('click', ()=> renderLogin());
+  document.querySelectorAll('.tab-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{ activeTab = btn.dataset.tab; refreshTabs(); });
+  });
+  refreshTabs();
+}
+function refreshTabs(){
+  document.querySelectorAll('#app > .tabs > .tab-btn').forEach(b=> b.classList.toggle('active', b.dataset.tab===activeTab));
+  if(activeTab==='market') renderMarketTab();
+  if(activeTab==='portfolio') renderPortfolioTab();
+  if(activeTab==='fno') renderFnoTab();
+  if(activeTab==='chart') renderChartTab();
+  if(activeTab==='orders') renderOrdersTab();
+}
+
+/* ===================== SUMMARY STATS ===================== */
+function computeHoldingsValue(){
+  let value=0, cost=0;
+  Object.entries(portfolio.holdings).forEach(([sym,h])=>{
+    const stock = STOCKS.find(s=>s.sym===sym);
+    if(stock && h.qty>0){ value += stock.ltp*h.qty; cost += h.avgCost*h.qty; }
+  });
+  return {value, cost, pnl:value-cost};
+}
+function computeFnoSummary(){
+  let marginBlocked=0, unrealizedPnL=0, longOptValue=0;
+  Object.values(portfolio.fno.positions).forEach(pos=>{
+    const spot = getSpot(pos.underlying);
+    if(pos.kind==='FUT'){
+      const cur = futPrice(spot);
+      const pnl = pos.side==='long' ? (cur-pos.avgPrice)*pos.lots*pos.lotSize : (pos.avgPrice-cur)*pos.lots*pos.lotSize;
+      unrealizedPnL += pnl; marginBlocked += pos.margin;
+    } else {
+      const cfg = FNO_UNDERLYINGS.find(u=>u.sym===pos.underlying);
+      const cur = bsPrice(spot, pos.strike, daysToExpiry()/365, RISK_FREE, cfg.sigma, pos.optType);
+      if(pos.side==='long'){ longOptValue += cur*pos.lots*pos.lotSize; }
+      else { unrealizedPnL += (pos.avgPrice-cur)*pos.lots*pos.lotSize; marginBlocked += pos.margin; }
+    }
+  });
+  return {marginBlocked, unrealizedPnL, longOptValue};
+}
+function renderSummaryStats(){
+  const box = document.getElementById('summaryStats');
+  if(!box) return;
+  const {value, cost, pnl} = computeHoldingsValue();
+  const fno = computeFnoSummary();
+  const net = portfolio.cash + value + fno.marginBlocked + fno.unrealizedPnL + fno.longOptValue;
+  const pnlPct = cost>0 ? (pnl/cost)*100 : 0;
+  box.innerHTML = `
+    <div class="stat-card"><div class="lbl">Net Worth</div><div class="val">${inr(net)}</div></div>
+    <div class="stat-card"><div class="lbl">Cash</div><div class="val">${inr(portfolio.cash)}</div></div>
+    <div class="stat-card"><div class="lbl">Equity Value</div><div class="val">${inr(value)}</div></div>
+    <div class="stat-card"><div class="lbl">Equity P&amp;L</div><div class="val ${pnl>=0?'up':'dn'}">${pnl>=0?'+':''}${inr(pnl)} (${pct(pnlPct)})</div></div>
+    <div class="stat-card"><div class="lbl">F&amp;O Margin Blocked</div><div class="val">${inr(fno.marginBlocked)}</div></div>
+    <div class="stat-card"><div class="lbl">F&amp;O Unrealised P&amp;L</div><div class="val ${fno.unrealizedPnL>=0?'up':'dn'}">${fno.unrealizedPnL>=0?'+':''}${inr(fno.unrealizedPnL)}</div></div>`;
+  const cashVal = document.getElementById('cashVal');
+  if(cashVal) cashVal.textContent = inr(portfolio.cash);
+}
+
+/* ===================== MARKET TAB (equity) ===================== */
+function renderMarketTab(){
+  document.getElementById('tabContent').innerHTML = `
+    <div class="section-title">Market Watch</div>
+    <div class="grid-summary" id="summaryStats"></div>
+    <div class="table-wrap"><table><thead><tr><th>Symbol</th><th>LTP</th><th>Chg %</th><th></th></tr></thead><tbody id="marketBody"></tbody></table></div>`;
+  renderSummaryStats(); renderMarketTable();
+}
+function renderMarketTable(){
+  const body = document.getElementById('marketBody'); if(!body) return;
+  body.innerHTML = STOCKS.map(s=>{
+    const chg = s.ltp-s.prevClose; const chgPct=(chg/s.prevClose)*100; const cls=chg>=0?'up':'dn';
+    return `<tr>
+      <td><strong>${s.sym}</strong><div class="name-sub">${s.name}</div></td>
+      <td>${inr(s.ltp)}</td><td class="chg ${cls}">${pct(chgPct)}</td>
+      <td class="row-actions">
+        <button class="mini-btn btn-buy" data-sym="${s.sym}" data-side="buy">Buy</button>
+        <button class="mini-btn btn-sell" data-sym="${s.sym}" data-side="sell">Sell</button>
+      </td></tr>`;
+  }).join('');
+  body.querySelectorAll('.mini-btn').forEach(btn=> btn.addEventListener('click', ()=> openOrderModal(btn.dataset.sym, btn.dataset.side)));
+}
+
+/* ===================== PORTFOLIO TAB (equity) ===================== */
+function renderPortfolioTab(){
+  document.getElementById('tabContent').innerHTML = `
+    <div class="section-title">Portfolio</div>
+    <div class="grid-summary" id="summaryStats"></div>
+    <div class="table-wrap" id="portfolioWrap"></div>`;
+  renderSummaryStats(); renderPortfolioTable();
+}
+function renderPortfolioTable(){
+  const wrap = document.getElementById('portfolioWrap'); if(!wrap) return;
+  const rows = Object.entries(portfolio.holdings).filter(([,h])=>h.qty>0);
+  if(rows.length===0){ wrap.innerHTML = `<div class="empty-state">No open equity positions. Head to Market Watch to place your first trade.</div>`; return; }
+  wrap.innerHTML = `<table><thead><tr><th>Symbol</th><th>Qty</th><th>Avg Cost</th><th>LTP</th><th>Value</th><th>P&amp;L</th><th></th></tr></thead>
+    <tbody>${rows.map(([sym,h])=>{
+      const stock = STOCKS.find(s=>s.sym===sym); const ltp = stock?stock.ltp:h.avgCost;
+      const value = ltp*h.qty; const pnl=(ltp-h.avgCost)*h.qty; const pnlPct=h.avgCost>0?((ltp-h.avgCost)/h.avgCost)*100:0;
+      const cls = pnl>=0?'up':'dn';
+      return `<tr><td><strong>${sym}</strong></td><td>${h.qty}</td><td>${inr(h.avgCost)}</td><td>${inr(ltp)}</td><td>${inr(value)}</td>
+        <td class="chg ${cls}">${pnl>=0?'+':''}${inr(pnl)} (${pct(pnlPct)})</td>
+        <td class="row-actions"><button class="mini-btn btn-sell" data-sym="${sym}" data-side="sell">Sell</button></td></tr>`;
+    }).join('')}</tbody></table>`;
+  wrap.querySelectorAll('.mini-btn').forEach(btn=> btn.addEventListener('click', ()=> openOrderModal(btn.dataset.sym, btn.dataset.side)));
+}
+
+/* ===================== ORDERS TAB (equity + F&O combined log) ===================== */
+function renderOrdersTab(){
+  const eq = portfolio.transactions.map(t=>({...t, kind:'EQUITY'}));
+  const fno = portfolio.fno.transactions.map(t=>({...t}));
+  const all = [...eq, ...fno].sort((a,b)=>b.time-a.time);
+  const el = document.getElementById('tabContent');
+  el.innerHTML = `<div class="section-title">Order History</div>
+    <div class="table-wrap">${all.length===0 ? `<div class="empty-state">No orders placed yet.</div>` : `
+    <table><thead><tr><th>Time</th><th>Instrument</th><th>Type</th><th>Side</th><th>Qty/Lots</th><th>Price</th><th>Total</th></tr></thead>
+    <tbody>${all.map(t=>{
+      const label = t.kind==='EQUITY' ? t.sym : (t.kind==='FUT' ? t.underlying+' FUT' : t.underlying+' '+t.strike+' '+t.optType);
+      const qty = t.kind==='EQUITY' ? t.qty : t.lots;
+      const lotOrShare = t.kind==='EQUITY' ? (t.qty*t.price) : (t.lots * (FNO_UNDERLYINGS.find(u=>u.sym===t.underlying)?.lotSize||1) * t.price);
+      return `<tr><td>${new Date(t.time).toLocaleString('en-IN')}</td><td><strong>${label}</strong></td>
+        <td>${t.kind}</td><td class="chg ${t.side==='buy'?'up':'dn'}">${t.side.toUpperCase()}</td>
+        <td>${qty}</td><td>${inr(t.price)}</td><td>${inr(lotOrShare)}</td></tr>`;
+    }).join('')}</tbody></table>`}</div>`;
+}
+
+/* ===================== EQUITY ORDER MODAL ===================== */
+function openOrderModal(sym, side){
+  const stock = STOCKS.find(s=>s.sym===sym); if(!stock) return;
+  pendingOrder = {sym, side};
+  document.getElementById('mSym').textContent = sym;
+  document.getElementById('mPrice').textContent = 'LTP ' + inr(stock.ltp);
+  document.getElementById('qtyInput').value = 1;
+  document.getElementById('qtyLabel').textContent = side==='buy' ? 'Quantity to Buy' : 'Quantity to Sell';
+  document.getElementById('formErr').style.display = 'none';
+  const modal = document.getElementById('orderModal');
+  modal.className = 'modal ' + (side==='buy' ? 'buy-mode':'sell-mode');
+  const submitBtn = document.getElementById('modalSubmit');
+  submitBtn.className = 'btn ' + (side==='buy'?'btn-buy':'btn-sell');
+  submitBtn.textContent = side==='buy' ? 'Confirm Buy' : 'Confirm Sell';
+  updateOrderTotal();
+  document.getElementById('modalOverlay').classList.add('show');
+}
+function updateOrderTotal(){
+  if(!pendingOrder) return;
+  const stock = STOCKS.find(s=>s.sym===pendingOrder.sym);
+  const qty = Math.max(0, parseInt(document.getElementById('qtyInput').value)||0);
+  document.getElementById('orderTotal').textContent = inr(stock.ltp*qty);
+}
+function closeModal(){ document.getElementById('modalOverlay').classList.remove('show'); pendingOrder=null; }
+async function submitOrder(){
+  if(!pendingOrder) return;
+  const {sym, side} = pendingOrder;
+  const stock = STOCKS.find(s=>s.sym===sym);
+  const qty = parseInt(document.getElementById('qtyInput').value)||0;
+  const errBox = document.getElementById('formErr');
+  if(qty<=0){ errBox.textContent='Enter a quantity greater than zero.'; errBox.style.display='block'; return; }
+  const cost = stock.ltp*qty;
+  if(side==='buy'){
+    if(cost > portfolio.cash){ errBox.textContent='Insufficient cash balance for this order.'; errBox.style.display='block'; return; }
+    const existing = portfolio.holdings[sym] || {qty:0, avgCost:0};
+    const newQty = existing.qty+qty;
+    const newAvg = ((existing.avgCost*existing.qty)+cost)/newQty;
+    portfolio.holdings[sym] = {qty:newQty, avgCost:Number(newAvg.toFixed(2))};
+    portfolio.cash = Number((portfolio.cash-cost).toFixed(2));
+  } else {
+    const existing = portfolio.holdings[sym] || {qty:0, avgCost:0};
+    if(qty > existing.qty){ errBox.textContent='You only hold '+existing.qty+' shares of '+sym+'.'; errBox.style.display='block'; return; }
+    existing.qty -= qty; portfolio.holdings[sym]=existing;
+    portfolio.cash = Number((portfolio.cash+cost).toFixed(2));
+  }
+  portfolio.transactions.push({time:Date.now(), sym, side, qty, price:stock.ltp});
+  await savePortfolio(currentRoll, portfolio);
+  closeModal(); refreshTabs();
+}
+document.getElementById('modalClose').addEventListener('click', closeModal);
+document.getElementById('modalCancel').addEventListener('click', closeModal);
+document.getElementById('modalSubmit').addEventListener('click', submitOrder);
+document.getElementById('qtyInput').addEventListener('input', updateOrderTotal);
+document.getElementById('modalOverlay').addEventListener('click', e=>{ if(e.target.id==='modalOverlay') closeModal(); });
+
+/* ===================== F&O TAB ===================== */
+function renderFnoTab(){
+  document.getElementById('tabContent').innerHTML = `
+    <div class="section-title">Futures &amp; Options</div>
+    <div class="grid-summary" id="summaryStats"></div>
+    <div class="tabs subtabs">
+      <button class="tab-btn" data-fsub="futures">Futures</button>
+      <button class="tab-btn" data-fsub="options">Options</button>
+      <button class="tab-btn" data-fsub="positions">Positions</button>
+    </div>
+    <div id="fnoSubContent"></div>`;
+  renderSummaryStats();
+  document.querySelectorAll('[data-fsub]').forEach(btn=> btn.addEventListener('click', ()=>{ fnoSubTab=btn.dataset.fsub; refreshFnoSub(); }));
+  refreshFnoSub();
+}
+function refreshFnoSub(){
+  document.querySelectorAll('[data-fsub]').forEach(b=> b.classList.toggle('active', b.dataset.fsub===fnoSubTab));
+  if(fnoSubTab==='futures') renderFuturesList();
+  if(fnoSubTab==='options') renderOptionsChainUI();
+  if(fnoSubTab==='positions') renderPositionsList();
+}
+function renderFuturesList(){
+  const el = document.getElementById('fnoSubContent'); if(!el) return;
+  el.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Contract</th><th>Spot</th><th>Futures LTP</th><th>Lot Size</th><th>Margin/Lot</th><th>Expiry</th><th></th></tr></thead>
+    <tbody>${FNO_UNDERLYINGS.map(u=>{
+      const spot=getSpot(u.sym); const fp=futPrice(spot); const margin=fp*u.lotSize*0.12;
+      return `<tr><td><strong>${u.sym}</strong><div class="name-sub">${u.name}</div></td><td>${inr(spot)}</td><td>${inr(fp)}</td><td>${u.lotSize}</td><td>${inr(margin)}</td><td>${daysToExpiry()}d</td>
+        <td class="row-actions"><button class="mini-btn btn-buy" data-sym="${u.sym}" data-side="buy">Long</button><button class="mini-btn btn-sell" data-sym="${u.sym}" data-side="sell">Short</button></td></tr>`;
+    }).join('')}</tbody></table></div>`;
+  el.querySelectorAll('.mini-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const u = FNO_UNDERLYINGS.find(x=>x.sym===btn.dataset.sym);
+      openFnoModal({kind:'FUT', underlying:u.sym, lotSize:u.lotSize, label:u.sym+' FUTURES'}, btn.dataset.side);
+    });
+  });
+}
+function renderOptionsChainUI(){
+  const el = document.getElementById('fnoSubContent'); if(!el) return;
+  const cfg = FNO_UNDERLYINGS.find(u=>u.sym===fnoSelectedUnderlying);
+  const spot = getSpot(fnoSelectedUnderlying);
+  const atm = Math.round(spot/cfg.strikeStep)*cfg.strikeStep;
+  const chain = getOptionChain(fnoSelectedUnderlying);
+  el.innerHTML = `
+    <div class="grid-summary" style="margin-bottom:16px;">
+      <div class="stat-card"><div class="lbl">Underlying</div><div class="val"><select id="fnoUnderlyingSelect" style="width:100%; background:var(--panel-alt); color:var(--text-bright); border:1px solid var(--border); font-family:'IBM Plex Mono',monospace; padding:5px; font-size:14px;">
+        ${FNO_UNDERLYINGS.map(u=>`<option value="${u.sym}" ${u.sym===fnoSelectedUnderlying?'selected':''}>${u.sym}</option>`).join('')}
+      </select></div></div>
+      <div class="stat-card"><div class="lbl">Spot</div><div class="val">${inr(spot)}</div></div>
+      <div class="stat-card"><div class="lbl">Lot Size</div><div class="val">${cfg.lotSize}</div></div>
+      <div class="stat-card"><div class="lbl">Days to Expiry</div><div class="val">${daysToExpiry()}d</div></div>
+    </div>
+    <div class="table-wrap"><table><thead><tr><th>Call (CE)</th><th style="text-align:center;">Strike</th><th>Put (PE)</th></tr></thead>
+    <tbody>${chain.map(row=>{
+      const isAtm = row.strike===atm;
+      return `<tr style="${isAtm?'background:rgba(212,169,63,0.06);':''}">
+        <td><div class="mono" style="margin-bottom:6px;">${inr(row.ce)}</div>
+          <div class="row-actions"><button class="mini-btn btn-buy" data-strike="${row.strike}" data-type="CE" data-side="buy">Buy</button><button class="mini-btn btn-sell" data-strike="${row.strike}" data-type="CE" data-side="sell">Write</button></div></td>
+        <td style="text-align:center; font-weight:700; color:${isAtm?'var(--gold)':'var(--text-bright)'};">${row.strike}${isAtm?' <span style="font-size:9px;color:var(--gold);">ATM</span>':''}</td>
+        <td><div class="mono" style="margin-bottom:6px;">${inr(row.pe)}</div>
+          <div class="row-actions"><button class="mini-btn btn-buy" data-strike="${row.strike}" data-type="PE" data-side="buy">Buy</button><button class="mini-btn btn-sell" data-strike="${row.strike}" data-type="PE" data-side="sell">Write</button></div></td>
+      </tr>`;
+    }).join('')}</tbody></table></div>`;
+  document.getElementById('fnoUnderlyingSelect').addEventListener('change', e=>{ fnoSelectedUnderlying=e.target.value; renderOptionsChainUI(); });
+  el.querySelectorAll('.mini-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const strike=parseInt(btn.dataset.strike), optType=btn.dataset.type, side=btn.dataset.side;
+      openFnoModal({kind:'OPT', underlying:fnoSelectedUnderlying, strike, optType, lotSize:cfg.lotSize, label:fnoSelectedUnderlying+' '+strike+' '+optType}, side);
+    });
+  });
+}
+function renderPositionsList(){
+  const el = document.getElementById('fnoSubContent'); if(!el) return;
+  const entries = Object.entries(portfolio.fno.positions);
+  if(entries.length===0){ el.innerHTML = `<div class="empty-state">No open F&amp;O positions. Head to Futures or Options to take a position.</div>`; return; }
+  el.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Instrument</th><th>Side</th><th>Lots</th><th>Avg Price</th><th>LTP</th><th>Margin</th><th>P&amp;L</th><th></th></tr></thead>
+    <tbody>${entries.map(([key,pos])=>{
+      const spot=getSpot(pos.underlying); let curPrice;
+      if(pos.kind==='FUT'){ curPrice=futPrice(spot); }
+      else { const cfg=FNO_UNDERLYINGS.find(u=>u.sym===pos.underlying); curPrice=bsPrice(spot,pos.strike,daysToExpiry()/365,RISK_FREE,cfg.sigma,pos.optType); }
+      const pnl = pos.side==='long' ? (curPrice-pos.avgPrice)*pos.lots*pos.lotSize : (pos.avgPrice-curPrice)*pos.lots*pos.lotSize;
+      const label = pos.kind==='FUT' ? pos.underlying+' FUT' : pos.underlying+' '+pos.strike+' '+pos.optType;
+      const cls = pnl>=0?'up':'dn';
+      return `<tr><td><strong>${label}</strong></td><td class="chg ${pos.side==='long'?'up':'dn'}">${pos.side.toUpperCase()}</td><td>${pos.lots}</td><td>${inr(pos.avgPrice)}</td><td>${inr(curPrice)}</td><td>${inr(pos.margin)}</td>
+        <td class="chg ${cls}">${pnl>=0?'+':''}${inr(pnl)}</td><td><button class="mini-btn btn-sell" data-key="${key}">Square Off</button></td></tr>`;
+    }).join('')}</tbody></table></div>`;
+  el.querySelectorAll('.mini-btn').forEach(btn=> btn.addEventListener('click', ()=> squareOffPosition(btn.dataset.key)));
+}
+
+/* ===================== F&O ORDER MODAL ===================== */
+function openFnoModal(meta, side){
+  pendingFno = {...meta, side};
+  const spot = getSpot(meta.underlying);
+  const cfgSigma = meta.kind==='OPT' ? FNO_UNDERLYINGS.find(u=>u.sym===meta.underlying).sigma : null;
+  const price = meta.kind==='FUT' ? futPrice(spot) : bsPrice(spot, meta.strike, daysToExpiry()/365, RISK_FREE, cfgSigma, meta.optType);
+  document.getElementById('fnoMSym').textContent = meta.label;
+  document.getElementById('fnoMPrice').textContent = (meta.kind==='FUT' ? 'Futures Price ' : 'Premium ') + inr(price);
+  document.getElementById('fnoLotsInput').value = 1;
+  document.getElementById('fnoLotsLabel').textContent = side==='buy' ? (meta.kind==='OPT'?'Lots to Buy':'Lots to Go Long') : (meta.kind==='OPT'?'Lots to Write (Sell)':'Lots to Go Short');
+  document.getElementById('fnoFormErr').style.display='none';
+  updateFnoTotal();
+  const modal = document.getElementById('fnoOrderModal');
+  modal.className = 'modal ' + (side==='buy'?'buy-mode':'sell-mode');
+  const submitBtn = document.getElementById('fnoModalSubmit');
+  submitBtn.className = 'btn ' + (side==='buy'?'btn-buy':'btn-sell');
+  submitBtn.textContent = side==='buy' ? 'Confirm Buy' : 'Confirm Sell';
+  document.getElementById('fnoModalOverlay').classList.add('show');
+}
+function updateFnoTotal(){
+  if(!pendingFno) return;
+  const spot = getSpot(pendingFno.underlying);
+  const cfgSigma = pendingFno.kind==='OPT' ? FNO_UNDERLYINGS.find(u=>u.sym===pendingFno.underlying).sigma : null;
+  const price = pendingFno.kind==='FUT' ? futPrice(spot) : bsPrice(spot, pendingFno.strike, daysToExpiry()/365, RISK_FREE, cfgSigma, pendingFno.optType);
+  const lots = Math.max(0, parseInt(document.getElementById('fnoLotsInput').value)||0);
+  document.getElementById('fnoOrderTotal').textContent = inr(lots*pendingFno.lotSize*price) + ' notional';
+}
+function closeFnoModal(){ document.getElementById('fnoModalOverlay').classList.remove('show'); pendingFno=null; }
+async function submitFnoOrder(){
+  if(!pendingFno) return;
+  const {kind, underlying, strike, optType, lotSize, side} = pendingFno;
+  const lots = parseInt(document.getElementById('fnoLotsInput').value)||0;
+  const errBox = document.getElementById('fnoFormErr');
+  if(lots<=0){ errBox.textContent='Enter lots greater than zero.'; errBox.style.display='block'; return; }
+  const spot = getSpot(underlying);
+  const cfgSigma = kind==='OPT' ? FNO_UNDERLYINGS.find(u=>u.sym===underlying).sigma : null;
+  const price = kind==='FUT' ? futPrice(spot) : bsPrice(spot, strike, daysToExpiry()/365, RISK_FREE, cfgSigma, optType);
+  const key = kind==='FUT' ? underlying+'_FUT' : underlying+'_'+strike+'_'+optType;
+  let pos = portfolio.fno.positions[key];
+  const actionSide = side==='buy' ? 'long' : 'short';
+
+  if(!pos || pos.lots===0){
+    const notional = lots*lotSize*price;
+    let marginDelta=0, cashDelta=0;
+    if(kind==='FUT'){ marginDelta=notional*0.12; cashDelta=-marginDelta; }
+    else if(actionSide==='long'){ cashDelta=-notional; }
+    else { marginDelta=notional*0.15; cashDelta=notional-marginDelta; }
+    const required = Math.max(0,-cashDelta);
+    if(required > portfolio.cash){ errBox.textContent='Insufficient cash. Required: '+inr(required); errBox.style.display='block'; return; }
+    portfolio.cash = Number((portfolio.cash+cashDelta).toFixed(2));
+    portfolio.fno.positions[key] = {kind, underlying, strike:strike||null, optType:optType||null, lotSize, side:actionSide, lots, avgPrice:price, margin:marginDelta};
+  } else if(pos.side===actionSide){
+    const notional = lots*lotSize*price;
+    let marginDelta=0, cashDelta=0;
+    if(kind==='FUT'){ marginDelta=notional*0.12; cashDelta=-marginDelta; }
+    else if(actionSide==='long'){ cashDelta=-notional; }
+    else { marginDelta=notional*0.15; cashDelta=notional-marginDelta; }
+    const required = Math.max(0,-cashDelta);
+    if(required > portfolio.cash){ errBox.textContent='Insufficient cash for this addition.'; errBox.style.display='block'; return; }
+    portfolio.cash = Number((portfolio.cash+cashDelta).toFixed(2));
+    const totalLots = pos.lots+lots;
+    pos.avgPrice = ((pos.avgPrice*pos.lots)+(price*lots))/totalLots;
+    pos.lots = totalLots; pos.margin += marginDelta;
+  } else {
+    if(lots > pos.lots){ errBox.textContent='Only '+pos.lots+' lot(s) open. Use Square Off in Positions to close fully.'; errBox.style.display='block'; return; }
+    const closeFraction = lots/pos.lots;
+    const marginReleased = pos.margin*closeFraction;
+    let cashDelta=0;
+    if(kind==='FUT'){
+      const pnl = pos.side==='long' ? (price-pos.avgPrice)*lots*lotSize : (pos.avgPrice-price)*lots*lotSize;
+      cashDelta = marginReleased+pnl;
+    } else if(pos.side==='long'){ cashDelta = lots*lotSize*price; }
+    else { cashDelta = marginReleased - lots*lotSize*price; }
+    portfolio.cash = Number((portfolio.cash+cashDelta).toFixed(2));
+    pos.margin -= marginReleased; pos.lots -= lots;
+    if(pos.lots<=0) delete portfolio.fno.positions[key];
+  }
+
+  portfolio.fno.transactions.push({time:Date.now(), kind, underlying, strike:strike||null, optType:optType||null, side, lots, price:Number(price.toFixed(2)), spotAtEntry:spot});
+  await savePortfolio(currentRoll, portfolio);
+  closeFnoModal(); refreshTabs();
+}
+async function squareOffPosition(key){
+  const pos = portfolio.fno.positions[key]; if(!pos) return;
+  const spot = getSpot(pos.underlying);
+  const cfg = pos.kind==='OPT' ? FNO_UNDERLYINGS.find(u=>u.sym===pos.underlying) : null;
+  const price = pos.kind==='FUT' ? futPrice(spot) : bsPrice(spot,pos.strike,daysToExpiry()/365,RISK_FREE,cfg.sigma,pos.optType);
+  const lots = pos.lots; const marginReleased = pos.margin;
+  let cashDelta=0;
+  if(pos.kind==='FUT'){
+    const pnl = pos.side==='long' ? (price-pos.avgPrice)*lots*pos.lotSize : (pos.avgPrice-price)*lots*pos.lotSize;
+    cashDelta = marginReleased+pnl;
+  } else if(pos.side==='long'){ cashDelta = lots*pos.lotSize*price; }
+  else { cashDelta = marginReleased - lots*pos.lotSize*price; }
+  portfolio.cash = Number((portfolio.cash+cashDelta).toFixed(2));
+  delete portfolio.fno.positions[key];
+  portfolio.fno.transactions.push({time:Date.now(), kind:pos.kind, underlying:pos.underlying, strike:pos.strike||null, optType:pos.optType||null, side: pos.side==='long'?'sell':'buy', lots, price:Number(price.toFixed(2)), spotAtEntry:spot});
+  await savePortfolio(currentRoll, portfolio);
+  refreshTabs();
+}
+document.getElementById('fnoModalClose').addEventListener('click', closeFnoModal);
+document.getElementById('fnoModalCancel').addEventListener('click', closeFnoModal);
+document.getElementById('fnoModalSubmit').addEventListener('click', submitFnoOrder);
+document.getElementById('fnoLotsInput').addEventListener('input', updateFnoTotal);
+document.getElementById('fnoModalOverlay').addEventListener('click', e=>{ if(e.target.id==='fnoModalOverlay') closeFnoModal(); });
+
+/* ===================== CHART TAB ===================== */
+function renderChartTab(){
+  const allSyms = [...INDICES.map(i=>i.sym), ...STOCKS.map(s=>s.sym)];
+  document.getElementById('tabContent').innerHTML = `
+    <div class="section-title">Price Chart &amp; Trade Entries</div>
+    <div class="field" style="max-width:240px;">
+      <label>Instrument</label>
+      <select id="chartSelect">${allSyms.map(s=>`<option value="${s}" ${s===chartSelectedSym?'selected':''}>${s}</option>`).join('')}</select>
+    </div>
+    <div class="table-wrap" style="padding:14px; margin-bottom:20px;"><canvas id="priceCanvas" style="width:100%; height:300px; display:block;"></canvas></div>
+    <div class="section-title" style="font-size:16px;">All Entries — <span id="chartEntrySym">${chartSelectedSym}</span></div>
+    <div class="table-wrap" id="entriesWrap"></div>`;
+  document.getElementById('chartSelect').addEventListener('change', e=>{ chartSelectedSym=e.target.value; refreshChart(); });
+  refreshChart();
+}
+function getEntriesForSymbol(sym){
+  const out = [];
+  portfolio.transactions.filter(t=>t.sym===sym).forEach(t=> out.push({t:t.time, price:t.price, buy:t.side==='buy', qty:t.qty, label:sym+' Equity'}));
+  portfolio.fno.transactions.filter(t=>t.underlying===sym).forEach(t=>{
+    const label = t.kind==='FUT' ? sym+' FUT' : sym+' '+t.strike+' '+t.optType;
+    out.push({t:t.time, price:t.spotAtEntry, buy:t.side==='buy', qty:t.lots, label});
+  });
+  out.sort((a,b)=>a.t-b.t);
+  return out;
+}
+function drawChart(sym){
+  const canvas = document.getElementById('priceCanvas'); if(!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width = canvas.clientWidth || 600;
+  const H = canvas.height = 300;
+  ctx.clearRect(0,0,W,H);
+  const hist = priceHistory[sym] || [];
+  if(hist.length < 2){ ctx.fillStyle='#6B7680'; ctx.font='13px IBM Plex Mono, monospace'; ctx.fillText('Gathering price data…', 16, H/2); return; }
+  const entries = getEntriesForSymbol(sym);
+  const times = hist.map(h=>h.t); const prices = hist.map(h=>h.p);
+  const tMin = Math.min(...times), tMax = Math.max(...times);
+  let pMin = Math.min(...prices), pMax = Math.max(...prices);
+  entries.forEach(e=>{ pMin = Math.min(pMin,e.price); pMax = Math.max(pMax,e.price); });
+  const pad = (pMax-pMin)*0.12 || pMax*0.02; pMin -= pad; pMax += pad;
+  const marginL=58, marginR=14, marginT=14, marginB=14;
+  const plotW = W-marginL-marginR, plotH = H-marginT-marginB;
+  const xOf = t => marginL + ((t-tMin)/((tMax-tMin)||1))*plotW;
+  const yOf = p => marginT + plotH - ((p-pMin)/((pMax-pMin)||1))*plotH;
+
+  ctx.strokeStyle = '#1F2A33'; ctx.fillStyle = '#6B7680'; ctx.font = '10px IBM Plex Mono, monospace'; ctx.lineWidth = 1;
+  for(let i=0;i<=4;i++){
+    const p = pMin + (pMax-pMin)*i/4; const y = yOf(p);
+    ctx.beginPath(); ctx.moveTo(marginL,y); ctx.lineTo(W-marginR,y); ctx.stroke();
+    ctx.fillText(p.toFixed(0), 4, y+3);
+  }
+
+  ctx.beginPath();
+  hist.forEach((h,i)=>{ const x=xOf(h.t), y=yOf(h.p); if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); });
+  ctx.strokeStyle = '#D4A93F'; ctx.lineWidth = 1.8; ctx.stroke();
+
+  entries.forEach(e=>{
+    const x = xOf(Math.max(tMin, Math.min(tMax, e.t))), y = yOf(e.price);
+    ctx.beginPath(); ctx.fillStyle = e.buy ? '#2FBF71' : '#E2564F';
+    if(e.buy){ ctx.moveTo(x-5,y+6); ctx.lineTo(x+5,y+6); ctx.lineTo(x,y-4); }
+    else { ctx.moveTo(x-5,y-6); ctx.lineTo(x+5,y-6); ctx.lineTo(x,y+4); }
+    ctx.closePath(); ctx.fill();
+  });
+}
+function refreshChart(){
+  drawChart(chartSelectedSym);
+  const entries = getEntriesForSymbol(chartSelectedSym);
+  const symLabel = document.getElementById('chartEntrySym'); if(symLabel) symLabel.textContent = chartSelectedSym;
+  const wrap = document.getElementById('entriesWrap'); if(!wrap) return;
+  if(entries.length===0){ wrap.innerHTML = `<div class="empty-state">No trade entries yet for ${chartSelectedSym}.</div>`; return; }
+  wrap.innerHTML = `<table><thead><tr><th>Time</th><th>Instrument</th><th>Side</th><th>Qty/Lots</th><th>Price</th></tr></thead>
+    <tbody>${[...entries].reverse().map(e=>`<tr><td>${new Date(e.t).toLocaleString('en-IN')}</td><td>${e.label}</td>
+      <td class="chg ${e.buy?'up':'dn'}">${e.buy?'BUY':'SELL'}</td><td>${e.qty}</td><td>${inr(e.price)}</td></tr>`).join('')}</tbody></table>`;
+}
+
+/* ===================== INIT ===================== */
+seedPriceHistory();
+renderTicker();
+renderLogin();
+</script>
+</body>
+</html>
